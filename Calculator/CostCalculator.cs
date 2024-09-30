@@ -2,28 +2,42 @@ namespace Calculator;
 
 public class CostCalculator
 {
-    public List<ChargeInfo> UpdateCost(List<ChargeInfo> charges)
+    public static List<ChargeInfo> UpdateCost(List<ChargeInfo> charges)
     {
-        var peak = 59.499m;
-        var shoulder = 39.138m;
-        var offPeak = 45.507m;
-        var supplyCharge = 107.965m;
-        var feedIn = 5m;
+        const decimal supplyCharge = 107.965m;
+        const decimal peak = 59.499m;
+        const decimal shoulder = 39.138m;
+        const decimal offPeak = 45.507m;
+        const decimal feedIn = 5m;
+
+        var standingCharges = GetStandingCharges(charges, supplyCharge);
 
         return charges.Select(c =>
         {
-            var tier = GetTier(TimeOnly.FromDateTime(c.EndDate));
-
-            // If Usage
-            var cost = tier switch
+            if (c.RateType == RateType.Usage)
             {
-                Tier.Peak => c.Amount * peak,
-                Tier.OffPeak => c.Amount * offPeak,
-                Tier.Shoulder => c.Amount * shoulder,
-            };
+                var tier = GetTier(TimeOnly.FromDateTime(c.EndDate));
 
-            return c with { Cost = cost };
+                var cost = tier switch
+                {
+                    Tier.Peak => c.Amount * peak,
+                    Tier.OffPeak => c.Amount * offPeak,
+                    Tier.Shoulder => c.Amount * shoulder,
+                    _ => throw new NotImplementedException(),
+                };
+
+                return c with { Cost = cost };
+            }
+            
+            if (c.RateType == RateType.Solar)
+            {
+                return c with { Cost = c.Amount * -feedIn };
+            }
+            
+            throw new NotImplementedException($"Unknown RateType: {c.RateType}");
         })
+        .Concat(standingCharges)
+        .OrderBy(c => c.StartDate)
         .ToList();
     }
 
@@ -34,12 +48,21 @@ public class CostCalculator
         return fileContents.Skip(1).Select(line =>
         {
             var parts = line.Split(',');
+            
             var rateType = Enum.Parse<RateType>(parts[0]);
             var startDate = DateTime.Parse(parts[1]);
             var endDate = DateTime.Parse(parts[2]);
             var amount = decimal.Parse(parts[3]);
+
             return new ChargeInfo(rateType, startDate, endDate, amount, 0);
         }).ToList();
+    }
+
+    private static List<ChargeInfo> GetStandingCharges(List<ChargeInfo> charges, decimal supplyCharge)
+    {
+        var dates = charges.Select(c => c.EndDate.Date.Date).Distinct();
+
+        return dates.Select(date => new ChargeInfo(RateType.Standing, date, date.Add(TimeSpan.FromMinutes(23 * 60 + 59)), supplyCharge, 0)).ToList();
     }
 
     private static Tier GetTier(TimeOnly time)

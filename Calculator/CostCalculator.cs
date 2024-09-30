@@ -1,46 +1,7 @@
 namespace Calculator;
 
-public class CostCalculator
+public class CostCalculator(PriceInfo prices)
 {
-    public static List<ChargeInfo> UpdateCost(List<ChargeInfo> charges)
-    {
-        const decimal supplyCharge = 107.965m;
-        const decimal peak = 59.499m;
-        const decimal shoulder = 39.138m;
-        const decimal offPeak = 45.507m;
-        const decimal feedIn = 5m;
-
-        var standingCharges = GetStandingCharges(charges, supplyCharge);
-
-        return charges.Select(c =>
-        {
-            if (c.RateType == RateType.Usage)
-            {
-                var tier = GetTier(TimeOnly.FromDateTime(c.EndDate));
-
-                var cost = tier switch
-                {
-                    Tier.Peak => c.Amount * peak,
-                    Tier.OffPeak => c.Amount * offPeak,
-                    Tier.Shoulder => c.Amount * shoulder,
-                    _ => throw new NotImplementedException(),
-                };
-
-                return c with { Cost = cost };
-            }
-            
-            if (c.RateType == RateType.Solar)
-            {
-                return c with { Cost = c.Amount * -feedIn };
-            }
-            
-            throw new NotImplementedException($"Unknown RateType: {c.RateType}");
-        })
-        .Concat(standingCharges)
-        .OrderBy(c => c.StartDate)
-        .ToList();
-    }
-
     public static async Task<List<ChargeInfo>> ReadUsage(string filePath)
     {
         var fileContents = await File.ReadAllLinesAsync(filePath);
@@ -57,12 +18,45 @@ public class CostCalculator
             return new ChargeInfo(rateType, startDate, endDate, amount, 0);
         }).ToList();
     }
+    
+    public List<ChargeInfo> UpdateCost(List<ChargeInfo> charges)
+    {
+        var standingCharges = GetStandingCharges(charges);
 
-    private static List<ChargeInfo> GetStandingCharges(List<ChargeInfo> charges, decimal supplyCharge)
+        return charges.Select(c =>
+        {
+            if (c.RateType == RateType.Usage)
+            {
+                var tier = GetTier(TimeOnly.FromDateTime(c.EndDate));
+
+                var cost = tier switch
+                {
+                    Tier.Peak => c.Usage * prices.Peak,
+                    Tier.OffPeak => c.Usage * prices.OffPeak,
+                    Tier.Shoulder => c.Usage * prices.Shoulder,
+                    _ => throw new NotImplementedException(),
+                };
+
+                return c with { Cost = cost };
+            }
+            
+            if (c.RateType == RateType.Solar)
+            {
+                return c with { Cost = c.Usage * -prices.FeedIn };
+            }
+            
+            throw new NotImplementedException($"Unknown RateType: {c.RateType}");
+        })
+        .Concat(standingCharges)
+        .OrderBy(c => c.StartDate)
+        .ToList();
+    }
+
+    private List<ChargeInfo> GetStandingCharges(List<ChargeInfo> charges)
     {
         var dates = charges.Select(c => c.EndDate.Date.Date).Distinct();
 
-        return dates.Select(date => new ChargeInfo(RateType.Standing, date, date.Add(TimeSpan.FromMinutes(23 * 60 + 59)), supplyCharge, 0)).ToList();
+        return dates.Select(date => new ChargeInfo(RateType.Standing, date, date.Add(TimeSpan.FromMinutes(23 * 60 + 59)), 0, prices.Standing)).ToList();
     }
 
     private static Tier GetTier(TimeOnly time)
@@ -72,7 +66,7 @@ public class CostCalculator
             return Tier.Shoulder;
         }
 
-        if (time >= new TimeOnly(1, 0) && time > new TimeOnly(6, 0))
+        if (time >= new TimeOnly(1, 0) && time < new TimeOnly(6, 0))
         {
             return Tier.OffPeak;
         }

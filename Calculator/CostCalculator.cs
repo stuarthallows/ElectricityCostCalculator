@@ -2,11 +2,13 @@ namespace Calculator;
 
 public class CostCalculator(PriceInfo prices)
 {
-    public static async Task<List<ChargeInfo>> ReadUsage(string filePath)
+    private List<ChargeInfo> _charges = [];
+    
+    public async Task Initialise(string filePath)
     {
         var fileContents = await File.ReadAllLinesAsync(filePath);
 
-        return fileContents.Skip(1).Select(line =>
+        _charges = fileContents.Skip(1).Select(line =>
         {
             var parts = line.Split(',');
             
@@ -17,13 +19,52 @@ public class CostCalculator(PriceInfo prices)
 
             return new ChargeInfo(rateType, startDate, endDate, amount, 0);
         }).ToList();
+        
+        _charges = UpdateCharges();
     }
     
-    public List<ChargeInfo> UpdateCost(List<ChargeInfo> charges)
+    public List<BillingInfo> GetBillingInfo(int year)
     {
-        var standingCharges = GetStandingCharges(charges);
+        return Enumerable.Range(1, 12).Select(month => GetBillingInfo(year, month)).ToList();
+    }
+    
+    public BillingInfo GetBillingInfo(int year, int month)
+    {
+        var startDate = new DateTime(year, month, 1);
+        var endDate = startDate.AddMonths(1).AddSeconds(-1);
+        
+        var chargesInRange = _charges.Where(c => c.StartDate >= startDate && c.EndDate <= endDate).ToList();
 
-        return charges.Select(c =>
+        var bought = chargesInRange.Where(c => c.RateType == RateType.Usage).ToArray();
+        var boughtCost = bought.Sum(c => c.Cost);
+        var boughtKWh = bought.Sum(c => c.Usage);
+        
+        var sold = chargesInRange.Where(c => c.RateType == RateType.Solar).ToArray();
+        var soldCost = sold.Sum(c => c.Cost);
+        var soldKwh = sold.Sum(c => c.Usage);
+        
+        var standing = chargesInRange.Where(c => c.RateType == RateType.Standing).ToArray();
+        var standingCost = standing.Sum(c => c.Cost);
+        
+        var billingInfo = new BillingInfo(
+            year, 
+            month, 
+            boughtCost, 
+            boughtKWh, 
+            soldCost, 
+            soldKwh, 
+            boughtCost + soldCost,
+            boughtKWh - soldKwh,
+            standingCost);
+        
+        return billingInfo;
+    }
+    
+    private List<ChargeInfo> UpdateCharges()
+    {
+        var standingCharges = GetStandingCharges(_charges);
+
+        return _charges.Select(c =>
         {
             if (c.RateType == RateType.Usage)
             {

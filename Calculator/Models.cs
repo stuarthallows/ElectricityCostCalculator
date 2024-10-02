@@ -1,6 +1,6 @@
 namespace Calculator;
 
-public record PriceInfo(decimal Standing, decimal Peak, decimal Shoulder, decimal OffPeak, decimal FeedIn);
+public record PriceInfo(string CompanyName, decimal Standing, decimal Peak, decimal Shoulder, decimal OffPeak, decimal FeedIn);
 
 public enum Tier { Peak, OffPeak, Shoulder };
 
@@ -15,11 +15,18 @@ public record BillingInfo(
     decimal BoughtKWh,
     decimal SoldCost,
     decimal SoldKWh,
-    decimal NetCost,
-    decimal NetKWh,
     decimal StandingCost)
 {
-    public decimal TotalCost { get; } = NetCost + StandingCost;
+    public decimal NetCost => BoughtCost + SoldCost;
     
-    public override string ToString() => $"[{Year}-{Month:00}] - Bought: {BoughtCost / 100:C} ({BoughtKWh:N} kWh), Sold: {-SoldCost / 100:C} ({SoldKWh:N} kWh), Net: {NetCost / 100:C} ({NetKWh:N} kWh), Total cost: {TotalCost / 100:C}";
+    public decimal NetKWh => BoughtKWh - SoldKWh;
+        
+    public decimal TotalCost { get; } = BoughtCost + SoldCost + StandingCost;
+    
+    public override string ToString() => $"[{Year}-{Month:00}] - " +
+                                         $"Bought: {BoughtCost / 100:C} ({BoughtKWh:N} kWh), " +
+                                         $"Sold: {-SoldCost / 100:C} ({SoldKWh:N} kWh), " +
+                                         $"Net: {NetCost / 100:C} ({NetKWh:N} kWh), " +
+                                         $"Standing: {StandingCost / 100:C}, " +
+                                         $"Total cost: {TotalCost / 100:C}";
 }

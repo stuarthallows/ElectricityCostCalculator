@@ -23,12 +23,31 @@ public class CostCalculator(PriceInfo prices)
         _charges = UpdateCharges();
     }
     
-    public List<BillingInfo> GetBillingInfo(int year)
+    public List<BillingInfo> GetMonthlyCosts(int year)
     {
-        return Enumerable.Range(1, 12).Select(month => GetBillingInfo(year, month)).ToList();
+        return Enumerable
+                .Range(1, 12)
+                .Select(month => GetMonthlyCosts(year, month))
+                .Where(c => c.BoughtKWh > 0)
+                .ToList();
     }
-    
-    public BillingInfo GetBillingInfo(int year, int month)
+
+    public BillingInfo GetTotalCost(int year)
+    {
+        var monthlyCosts = GetMonthlyCosts(year);
+        
+        var boughtCost = monthlyCosts.Sum(c => c.BoughtCost);
+        
+        return new BillingInfo(year, 
+            0, 
+            monthlyCosts.Sum(c => c.BoughtCost), 
+            monthlyCosts.Sum(c => c.BoughtKWh), 
+            monthlyCosts.Sum(c => c.SoldCost), 
+            monthlyCosts.Sum(c => c.SoldKWh), 
+            monthlyCosts.Sum(c => c.StandingCost));
+    }
+
+    private BillingInfo GetMonthlyCosts(int year, int month)
     {
         var startDate = new DateTime(year, month, 1);
         var endDate = startDate.AddMonths(1).AddSeconds(-1);
@@ -53,8 +72,6 @@ public class CostCalculator(PriceInfo prices)
             boughtKWh, 
             soldCost, 
             soldKwh, 
-            boughtCost + soldCost,
-            boughtKWh - soldKwh,
             standingCost);
         
         return billingInfo;
